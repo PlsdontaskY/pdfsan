@@ -1,0 +1,88 @@
+using System;
+using System.IO;
+using System.Reflection.PortableExecutable;
+using iTextSharp.text.pdf;
+
+namespace MaliciousPdfScanner
+{
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            // Specify the path to the PDF file
+            string filePath = @"C:\sam9\sam9.pdf";
+
+            try
+            {
+                if (IsPdfMalicious(filePath))
+                {
+                    Console.WriteLine("Warning: This PDF contains JavaScript actions that could be malicious.");
+                }
+                else
+                {
+                    Console.WriteLine("The PDF appears to be safe. No JavaScript actions found.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error reading PDF file: {ex.Message}");
+            }
+        }
+
+        // Function to check for JavaScript actions within the PDF
+        public static bool IsPdfMalicious(string filePath)
+        {
+            using (PdfReader reader = new PdfReader(filePath))
+            {
+                // Check for OpenAction JavaScript
+                PdfDictionary catalog = reader.Catalog;
+                PdfObject openAction = catalog.Get(PdfName.OPENACTION);
+                if (ContainsJavaScript(openAction))
+                {
+                    return true;
+                }
+
+                // Loop through each page to check for JavaScript in annotations or actions
+                for (int i = 1; i <= reader.NumberOfPages; i++)
+                {
+                    PdfDictionary pageDict = reader.GetPageN(i);
+                    PdfArray annots = pageDict.GetAsArray(PdfName.ANNOTS);
+
+                    if (annots != null)
+                    {
+                        foreach (PdfObject annot in annots.ArrayList)
+                        {
+                            PdfDictionary annotDict = (PdfDictionary)PdfReader.GetPdfObject(annot);
+                            PdfObject action = annotDict.Get(PdfName.A);
+                            if (ContainsJavaScript(action))
+                            {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // No malicious JavaScript found
+            return false;
+        }
+
+        // Helper function to detect JavaScript actions in a given PDF object
+        private static bool ContainsJavaScript(PdfObject pdfObject)
+        {
+            if (pdfObject is PdfDictionary dict)
+            {
+                // Check for JavaScript actions
+                PdfName subtype = dict.GetAsName(PdfName.S);
+                PdfString js = dict.GetAsString(PdfName.JS);
+
+                if (subtype != null && subtype.Equals(PdfName.JAVASCRIPT) && js != null)
+                {
+                    Console.WriteLine($"JavaScript Action Found: {js.ToUnicodeString()}");
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+}
